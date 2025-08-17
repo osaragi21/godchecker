@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>God Checker – 自動更新（PWA対応）</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <meta name="theme-color" content="#0b0c0f"/>
+  <link rel="icon" href="icons/icon-192.png" sizes="192x192">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    :root{--bg:#0b0c0f;--panel:#111318;--accent:#4f7cff}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:#e5e7eb;font-family:sans-serif;height:100vh;display:flex;flex-direction:column}
+    header{padding:.6rem 1rem;background:#111318;z-index:10;border-bottom:1px solid #20222a}
+    header h1{margin:0;font-size:1rem}
+    .controls{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.4rem;align-items:center}
+    .input,.select,.btn{background:#0f1218;border:1px solid #262b35;color:#e5e7eb;border-radius:.4rem;padding:.45rem .6rem}
+    .btn.primary{background:var(--accent);border-color:transparent}
+    .group{display:flex;gap:.8rem;align-items:center;background:#0f1218;border:1px solid #262b35;border-radius:.6rem;padding:.35rem .6rem}
+    #main{flex:1;display:flex;flex-direction:column}
+    #map{flex:1;min-height:50vh}
+    #list{background:var(--panel);max-height:42vh;overflow:auto}
+    .empty{padding:1rem;color:#cbd5e1}
+    .card{border-bottom:1px solid #20222a;padding:.8rem 1rem}
+    .title{display:flex;gap:.5rem;align-items:center}
+    .title h3{margin:0;font-size:1rem}
+    .pill{font-size:.72rem;padding:.1rem .5rem;border-radius:.5rem;border:1px solid #2b3342}
+    .pill.ok{background:#065f46;color:#a7f3d0}
+    .pill.soon{background:#78350f;color:#fde68a}
+    .pill.live{background:#1e3a8a;color:#bfdbfe}
+    .meta{margin-top:.25rem;font-size:.85rem;color:#cbd5e1;display:flex;gap:.75rem;flex-wrap:wrap}
+    .chips{display:flex;gap:.3rem;margin-top:.3rem;flex-wrap:wrap}
+    .chip{font-size:.72rem;background:#1a1f29;border:1px solid #2b3342;color:#b6c2d1;padding:.15rem .45rem;border-radius:.4rem}
+    .purpose{margin-top:.35rem;font-weight:700}
+    .desc{margin-top:.2rem;color:#cbd5e1}
+    a{color:#9bbcff}
+    .statusbar{font-size:.8rem;color:#b6c2d1;margin-left:auto}
+  </style>
+</head>
+<body>
+<header>
+  <div style="display:flex;gap:.8rem;align-items:center;flex-wrap:wrap">
+    <h1>God Checker – 自動更新（PWA対応）</h1>
+    <div class="statusbar">
+      <span id="lastUpdated">最終更新: --</span> · <span id="sourceInfo">ソース: --</span>
+    </div>
+  </div>
+  <div class="controls">
+    <select id="range" class="select">
+      <option value="today">今日</option>
+      <option value="week" selected>今週</option>
+      <option value="next">来週</option>
+      <option value="all">すべて</option>
+    </select>
+    <div class="group" role="group" aria-label="カテゴリ">
+      <label><input type="checkbox" id="chkImperial" checked/> 皇族関連</label>
+      <label><input type="checkbox" id="chkPM" checked/> 首相関連</label>
+      <label><input type="checkbox" id="chkState" checked/> 国賓関連</label>
+    </div>
+    <input id="q" class="input" placeholder="キーワード（例：外堀通り / 迎賓館）" />
+    <button id="refreshBtn" class="btn primary">いま更新</button>
+    <input type="file" id="fileInput" accept=".json" style="display:none"/>
+    <button id="btnLoadFile" class="btn">JSON読み込み</button>
+    <button id="btnLoadUrl" class="btn">URLから読み込み</button>
+  </div>
+</header>
+<div id="main">
+  <div id="map"></div>
+  <section id="list" aria-live="polite"></section>
+</div>
+
+<script id="SAMPLE" type="application/json">
+[
+  {
+    "id": "palace_01",
+    "title": "皇居外苑 周辺規制（周回道路）",
+    "purpose": "来訪行事に伴う警備・安全確保",
+    "desc": "周回道路の一部で一時通行止め。",
+    "authority": "警視庁",
+    "area": "千代田区 皇居外苑",
+    "startAt": "2025-08-20T09:00:00+09:00",
+    "endAt":   "2025-08-20T12:00:00+09:00",
+    "geometry": { "type":"Polygon", "coordinates":[ [ [139.7605,35.6810],[139.7660,35.6810],[139.7660,35.6850],[139.7605,35.6850],[139.7605,35.6810] ] ] },
+    "roads": ["内堀通り"],
+    "tags": ["imperial"],
+    "sourceUrl": "https://example.mpd.go.jp/palace_aug20",
+    "newsUrl": "https://example.news.jp/article/palace_aug20"
+  },
+  {
+    "id": "pm_akasaka_01",
+    "title": "首相官邸〜霞が関 周辺規制",
+    "purpose": "内閣総理大臣の移動に伴う警護運用",
+    "desc": "桜田通り・外堀通りの一部で断続的な交通制御。",
+    "authority": "警視庁",
+    "area": "千代田区 霞が関",
+    "startAt": "2025-08-26T08:00:00+09:00",
+    "endAt":   "2025-08-26T09:00:00+09:00",
+    "geometry": { "type":"LineString", "coordinates":[ [139.7480,35.6735],[139.7528,35.6760],[139.7575,35.6765] ] },
+    "roads": ["桜田通り","外堀通り"],
+    "tags": ["pm"],
+    "sourceUrl": "https://example.mpd.go.jp/pm_akasaka"
+  },
+  {
+    "id": "state_guest_akasaka",
+    "title": "迎賓館（赤坂離宮）周辺規制",
+    "purpose": "国賓来日に伴う儀仗・護衛対応",
+    "desc": "外苑東通りで一時通行止め、周辺で警備強化。",
+    "authority": "警視庁",
+    "area": "港区 元赤坂",
+    "startAt": "2025-09-10T10:00:00+09:00",
+    "endAt":   "2025-09-10T13:00:00+09:00",
+    "geometry": { "type":"Polygon", "coordinates":[ [ [139.7248,35.6778],[139.7312,35.6778],[139.7312,35.6816],[139.7248,35.6816],[139.7248,35.6778] ] ] },
+    "roads": ["外苑東通り"],
+    "tags": ["state"],
+    "sourceUrl": "https://example.mpd.go.jp/state_guest_akasaka",
+    "newsUrl": "https://example.news.jp/article/state_guest"
+  }
+]
+</script>
+
+<script>
+// PWA SW登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
+
+const CONFIG={ endpoints:["restrictions.json"], refreshMinutes:30, allowEmbeddedFallback:true };
+const $=s=>document.querySelector(s);
+const fmt=iso=> new Date(iso).toLocaleString("ja-JP",{month:"numeric",day:"numeric",weekday:"short",hour:"2-digit",minute:"2-digit"});
+const now=()=>new Date();
+
+function badge(it){
+  const t=now(), s=new Date(it.startAt), e=new Date(it.endAt);
+  if(t<s){ const h=(s-t)/36e5; return h<=2? '<span class="pill soon">まもなく</span>' : '<span class="pill ok">予定</span>'; }
+  if(t>=s && t<=e) return '<span class="pill live">実施中</span>';
+  return '';
+}
+function inRange(item, mode){
+  const s=new Date(item.startAt), e=new Date(item.endAt), t=now();
+  const sod=d=>new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if(mode==='all') return true;
+  if(mode==='today'){ const sd=sod(t), ed=new Date(sd); ed.setDate(sd.getDate()+1); return e>=sd && s<ed; }
+  if(mode==='week' || mode==='next'){ let base=sod(t); if(mode==='next') base.setDate(base.getDate()+7); const end=new Date(base); end.setDate(end.getDate()+7); return e>=base && s<end; }
+  return true;
+}
+
+// 地図
+const map=L.map('map').setView([35.68,139.76],12);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+const group=L.layerGroup().addTo(map);
+function draw(g){
+  if(!g) return null;
+  if(g.type==="LineString"){return L.polyline(g.coordinates.map(([lng,lat])=>[lat,lng]),{color:"red"}).addTo(group);}
+  if(g.type==="Polygon"){return L.polygon(g.coordinates[0].map(([lng,lat])=>[lat,lng]),{color:"green",fillOpacity:0.3}).addTo(group);}
+  return null;
+}
+
+// 描画
+function render(items){
+  group.clearLayers();
+  const list=$('#list'); list.innerHTML='';
+  if(items.length===0){ list.innerHTML='<div class="empty">現在までご予定はありません（公開情報ベース）。</div>'; return; }
+  items.forEach(it=>{
+    const shape=draw(it.geometry);
+    if(shape){
+      shape.bindPopup(`<strong>${it.title}</strong><br>${fmt(it.startAt)} – ${fmt(it.endAt)}<br>${it.area}<br><a href="${it.sourceUrl}" target="_blank" rel="noopener">公表ソース</a>${it.newsUrl?` · <a href="${it.newsUrl}" target="_blank" rel="noopener">関連ニュース</a>`:''}`);
+    }
+    const card=document.createElement('div');
+    card.className='card';
+    card.innerHTML=`
+      <div class="title">${badge(it)}<h3>${it.title}</h3></div>
+      <div class="meta"><span>${fmt(it.startAt)} – ${fmt(it.endAt)}</span><span>${it.area}</span><span>${it.authority||''}</span></div>
+      <div class="chips">${(it.roads||[]).map(r=>`<span class="chip">${r}</span>`).join('')} ${(it.tags||[]).map(t=>`<span class="chip">#${t}</span>`).join('')}</div>
+      <div class="purpose">${it.purpose||''}</div>
+      <div class="desc">${it.desc||''}</div>
+      <div style="margin-top:.35rem">
+        <a href="${it.sourceUrl}" target="_blank" rel="noopener">公表ソース</a>
+        ${it.newsUrl ? ` · <a href="${it.newsUrl}" target="_blank" rel="noopener">関連ニュース</a>` : ''}
+        · <a href="#" class="zoom">周辺にズーム</a>
+      </div>
+    `;
+    card.querySelector('.zoom').addEventListener('click', e=>{ e.preventDefault(); if(shape){ map.fitBounds(shape.getBounds(), {padding:[20,20]}); shape.openPopup(); }});
+    list.appendChild(card);
+  });
+}
+
+function applyFilter(raw){
+  const q=$('#q').value.trim().toLowerCase();
+  const range=$('#range').value;
+  const cats=new Set();
+  if($('#chkImperial').checked) cats.add('imperial');
+  if($('#chkPM').checked) cats.add('pm');
+  if($('#chkState').checked) cats.add('state');
+  const items=raw.filter(d=>
+    inRange(d, range) &&
+    (cats.size===0 || (d.tags||[]).some(t=>cats.has(t))) &&
+    (!q || [d.title,d.desc,d.area,d.authority,(d.purpose||''),...(d.roads||[]),(d.tags||[]).join(',')].join(' ').toLowerCase().includes(q))
+  ).sort((a,b)=> new Date(a.startAt) - new Date(b.startAt));
+  render(items);
+}
+
+// データ取得
+async function fetchLocalOrEmbedded(){
+  try{
+    const res = await fetch("restrictions.json", {cache:"no-store"});
+    if(res.ok){
+      const j = await res.json();
+      if(Array.isArray(j) && j.length>0){ $('#sourceInfo').textContent = 'ソース: restrictions.json'; return j; }
+    }
+  }catch(e){ /* ignore */ }
+  // Fallback
+  const j = JSON.parse(document.getElementById('SAMPLE').textContent);
+  $('#sourceInfo').textContent = 'ソース: サンプル表示中（restrictions.json が見つからない/空）';
+  return j;
+}
+
+let RAW_CACHE=[];
+async function refreshNow(){
+  const data = await fetchLocalOrEmbedded();
+  RAW_CACHE = data;
+  $('#lastUpdated').textContent = '最終更新: ' + new Date().toLocaleString('ja-JP');
+  applyFilter(RAW_CACHE);
+}
+
+function attachManualLoaders(){
+  const finput = document.getElementById('fileInput');
+  document.getElementById('btnLoadFile').addEventListener('click', ()=> finput.click());
+  finput.addEventListener('change', async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    const txt = await file.text();
+    try{
+      const j = JSON.parse(txt);
+      RAW_CACHE = Array.isArray(j) ? j : [];
+      $('#sourceInfo').textContent = 'ソース: ローカルJSON（手動読み込み）';
+      applyFilter(RAW_CACHE);
+    }catch(err){ alert('JSONの形式が不正です'); }
+  });
+  document.getElementById('btnLoadUrl').addEventListener('click', async ()=>{
+    const url = prompt('JSONのURLを入力してください（https://…）');
+    if(!url) return;
+    try{
+      const res = await fetch(url, {cache:'no-store'});
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const j = await res.json();
+      RAW_CACHE = Array.isArray(j) ? j : [];
+      $('#sourceInfo').textContent = 'ソース: ' + url;
+      applyFilter(RAW_CACHE);
+    }catch(err){ alert('取得に失敗しました: '+err.message); }
+  });
+}
+
+['change','input'].forEach(ev=>{
+  document.getElementById('range').addEventListener(ev, ()=>applyFilter(RAW_CACHE));
+  document.getElementById('chkImperial').addEventListener(ev, ()=>applyFilter(RAW_CACHE));
+  document.getElementById('chkPM').addEventListener(ev, ()=>applyFilter(RAW_CACHE));
+  document.getElementById('chkState').addEventListener(ev, ()=>applyFilter(RAW_CACHE));
+  document.getElementById('q').addEventListener(ev, ()=>applyFilter(RAW_CACHE));
+});
+document.getElementById('refreshBtn').addEventListener('click', refreshNow);
+
+attachManualLoaders();
+refreshNow();
+</script>
+</body>
+</html>
