@@ -1,0 +1,46 @@
+[
+  {
+    "id": "manual_example",
+    "title": "（手動）皇居前 広場規制",
+    "purpose": "式典",
+    "desc": "手動追記の例",
+    "authority": "警視庁",
+    "area": "千代田区 皇居前",
+    "startAt": "2025-09-05T09:30:00+09:00",
+    "endAt": "2025-09-05T12:00:00+09:00",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            139.7548,
+            35.6795
+          ],
+          [
+            139.76,
+            35.6795
+          ],
+          [
+            139.76,
+            35.683
+          ],
+          [
+            139.7548,
+            35.683
+          ],
+          [
+            139.7548,
+            35.6795
+          ]
+        ]
+      ]
+    },
+    "roads": [
+      "内堀通り"
+    ],
+    "tags": [
+      "imperial"
+    ],
+    "sourceUrl": "https://example.mpd.go.jp/palace_sep5"
+  }
+]
